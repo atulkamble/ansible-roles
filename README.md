@@ -68,7 +68,7 @@ Expected project layout:
 
 ## 3. Add default variables
 
-Create `roles/webserver/defaults/main.yml`:
+Create `sudo nano roles/webserver/defaults/main.yml`:
 
 ```yaml
 ---
@@ -83,7 +83,7 @@ Defaults provide values the role can use. A playbook or command-line extra varia
 
 ## 4. Add role tasks
 
-Create `roles/webserver/tasks/main.yml`:
+Create `sudo nano roles/webserver/tasks/main.yml`:
 
 ```yaml
 ---
@@ -112,7 +112,7 @@ Amazon Linux 2023 uses DNF. Its Apache package and service are both named `httpd
 
 ## 5. Add a handler
 
-Create `roles/webserver/handlers/main.yml`:
+Create `sudo nano roles/webserver/handlers/main.yml`:
 
 ```yaml
 ---
@@ -126,7 +126,7 @@ The homepage task notifies this handler. Ansible restarts Apache only when the t
 
 ## 6. Add the Jinja2 page template
 
-Create `roles/webserver/templates/index.html.j2`:
+Create `sudo nano roles/webserver/templates/index.html.j2`:
 
 ```html
 <!doctype html>
@@ -148,7 +148,7 @@ Ansible substitutes the variables when it copies the template to the target host
 
 ## 7. Create the playbook
 
-Create `/etc/ansible/site.yml`:
+Create `sudo nano /etc/ansible/site.yml`:
 
 ```yaml
 ---
@@ -156,6 +156,12 @@ Create `/etc/ansible/site.yml`:
   hosts: web
   roles:
     - webserver
+```
+
+# apply playbook yaml 
+```
+cd /etc/ansible
+sudo ansible-plabook -i iventory/hosts playbooks/site.yml
 ```
 
 The `roles` section tells Ansible to load tasks and supporting files from `roles/webserver/`. Since privilege escalation is already enabled in `ansible.cfg`, the playbook does not need a separate `become` line.
