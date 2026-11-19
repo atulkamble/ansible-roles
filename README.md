@@ -1,27 +1,26 @@
-# Ansible Roles Practice
+# Ansible Roles: Basic Practice
 
-Beginner practice for reusable Ansible roles using the existing `/etc/ansible` control-node layout and Amazon Linux 2023 targets.
+This hands-on exercise uses your existing Ansible control node at `/etc/ansible` and your Amazon Linux 2023 EC2 hosts.
 
-This exercise applies the `webserver` role to the host in your `[web]` group. It installs Apache HTTP Server (`httpd`), deploys a templated homepage, and ensures Apache starts at boot. Your `[db]` host is not modified.
+You will create a reusable `webserver` role that installs Apache (`httpd`), writes a home page from a Jinja2 template, and makes sure Apache is enabled and running. The playbook targets only your `[web]` host, `23.22.227.133`. It does not modify the `[db]` host, `32.202.123.57`.
 
-## Repository contents
+## 1. Current lab configuration
 
-```text
-ansible.cfg.example
-inventory/hosts.example
-site.yml
-roles/webserver/
-├── defaults/main.yml
-├── handlers/main.yml
-├── tasks/main.yml
-└── templates/index.html.j2
+Your existing inventory:
+
+```ini
+[all]
+23.22.227.133
+32.202.123.57
+
+[web]
+23.22.227.133
+
+[db]
+32.202.123.57
 ```
 
-## Lab prerequisites
-
-Use your existing inventory and SSH key from `/etc/ansible`. The example inventory reflects the lab addresses shared for this exercise, but adjust them if your public IPs have changed. Never commit your private key.
-
-Your configuration should be:
+Your `/etc/ansible/ansible.cfg`:
 
 ```ini
 [defaults]
@@ -32,66 +31,213 @@ host_key_checking = False
 retry_files_enabled = False
 
 [privilege_escalation]
-become = True
+become = true
 become_method = sudo
 become_user = root
-become_ask_pass = False
+become_ask_pass = false
 ```
 
-## Install the role into the current lab
+Because `inventory = ./inventory` points to a directory, Ansible reads the `inventory/hosts` file inside it. The key path is relative to `/etc/ansible`. Keep the private key private and do not upload it to GitHub.
 
-From a clone of this repository, copy its files into your existing project. For example, if cloned under `/tmp/ansible-roles`:
+## 2. Create role folders
+
+Run these commands on the Ansible control node:
 
 ```bash
-sudo mkdir -p /etc/ansible/roles
-sudo cp -R /tmp/ansible-roles/roles/webserver /etc/ansible/roles/
-sudo cp /tmp/ansible-roles/site.yml /etc/ansible/site.yml
+cd /etc/ansible
+mkdir -p roles/webserver/{defaults,tasks,handlers,templates}
+```
+
+Expected project layout:
+
+```text
+/etc/ansible/
+├── ansible.cfg
+├── aws/
+│   └── ansible.pem
+├── inventory/
+│   └── hosts
+├── roles/
+│   └── webserver/
+│       ├── defaults/main.yml
+│       ├── handlers/main.yml
+│       ├── tasks/main.yml
+│       └── templates/index.html.j2
+└── site.yml
+```
+
+## 3. Add default variables
+
+Create `roles/webserver/defaults/main.yml`:
+
+```yaml
+---
+webserver_package: httpd
+webserver_service: httpd
+webserver_document_root: /var/www/html
+webserver_page_title: "Ansible Roles Practice"
+webserver_page_message: "This page was deployed using an Ansible role."
+```
+
+Defaults provide values the role can use. A playbook or command-line extra variable can override them.
+
+## 4. Add role tasks
+
+Create `roles/webserver/tasks/main.yml`:
+
+```yaml
+---
+- name: Install Apache HTTP Server
+  ansible.builtin.dnf:
+    name: "{{ webserver_package }}"
+    state: present
+
+- name: Deploy the homepage
+  ansible.builtin.template:
+    src: index.html.j2
+    dest: "{{ webserver_document_root }}/index.html"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart Apache
+
+- name: Ensure Apache is enabled and running
+  ansible.builtin.service:
+    name: "{{ webserver_service }}"
+    state: started
+    enabled: true
+```
+
+Amazon Linux 2023 uses DNF. Its Apache package and service are both named `httpd`.
+
+## 5. Add a handler
+
+Create `roles/webserver/handlers/main.yml`:
+
+```yaml
+---
+- name: Restart Apache
+  ansible.builtin.service:
+    name: "{{ webserver_service }}"
+    state: restarted
+```
+
+The homepage task notifies this handler. Ansible restarts Apache only when the template changes.
+
+## 6. Add the Jinja2 page template
+
+Create `roles/webserver/templates/index.html.j2`:
+
+```html
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ webserver_page_title }}</title>
+  </head>
+  <body>
+    <h1>{{ webserver_page_title }}</h1>
+    <p>{{ webserver_page_message }}</p>
+    <p>Server: {{ inventory_hostname }}</p>
+  </body>
+</html>
+```
+
+Ansible substitutes the variables when it copies the template to the target host.
+
+## 7. Create the playbook
+
+Create `/etc/ansible/site.yml`:
+
+```yaml
+---
+- name: Configure Apache on the web server
+  hosts: web
+  roles:
+    - webserver
+```
+
+The `roles` section tells Ansible to load tasks and supporting files from `roles/webserver/`. Since privilege escalation is already enabled in `ansible.cfg`, the playbook does not need a separate `become` line.
+
+## 8. Check SSH and inventory
+
+Make sure the key exists and has restrictive permissions:
+
+```bash
 cd /etc/ansible
 chmod 400 aws/ansible.pem
-```
-
-Keep your existing `ansible.cfg` and `inventory/hosts`; the example files are references.
-
-## Run and verify
-
-```bash
 ansible-inventory --graph
 ansible web -m ansible.builtin.ping
+```
+
+Expected ping result includes `"ping": "pong"`. If SSH fails, confirm the public IP, key path, key permissions, security-group SSH access, and `ec2-user` login.
+
+## 9. Preview and apply
+
+Preview the changes without applying them:
+
+```bash
 ansible-playbook site.yml --check --diff
+```
+
+Apply the role:
+
+```bash
 ansible-playbook site.yml
+```
+
+Run it a second time:
+
+```bash
+ansible-playbook site.yml
+```
+
+The second run should report mostly `ok`, because the host already matches the requested configuration. This is Ansible idempotency.
+
+## 10. Verify Apache and the page
+
+Run on the target through Ansible:
+
+```bash
 ansible web -a "systemctl is-active httpd"
 ansible web -a "curl -s http://localhost"
 ```
 
-To view the site remotely, allow inbound TCP port 80 in the web instance's security group, then run:
+To access the page from your control node, allow inbound TCP port 80 in the web EC2 instance's security group:
 
 ```bash
 curl http://23.22.227.133
 ```
 
-## Role concepts
-
-- **Role:** reusable directory of tasks, defaults, handlers, and templates.
-- **Defaults:** low-priority variables that can be overridden.
-- **Tasks:** ordered operations run against matched hosts.
-- **Template:** Jinja2 file rendered with variables and host details.
-- **Handler:** runs when notified by a changed task; here Apache restarts when the homepage changes.
-- **Idempotency:** repeated runs converge on the desired state; unchanged resources should report `ok`.
-
 ## Practice challenges
 
-1. Override the message without editing the role:
+1. Change the default page message in `roles/webserver/defaults/main.yml` and apply the playbook again.
+2. Override the message for one run without editing files:
    ```bash
    ansible-playbook site.yml -e 'webserver_page_message=Hello from my role'
    ```
-2. Add a `webserver_page_color` default and use it in the HTML template.
-3. Create a `common` role that installs `git`.
-4. Change `hosts: web` to `hosts: all` only after considering that this also installs Apache on the database server.
-5. Run the playbook twice and explain the difference between `changed` and `ok`.
+3. Add `webserver_page_color` to defaults and use it as the page background color in the template.
+4. Create a second role named `common` that installs `git`.
+5. Add another host to the `[web]` group and observe how Ansible applies the same role to each host.
+6. Change `hosts: web` to `hosts: all` and explain why that would install Apache on the database host too.
+
+## Key terms
+
+- **Role:** a reusable structure for tasks, variables, handlers, templates, and other files.
+- **Defaults:** baseline role variables that can be overridden.
+- **Task:** one operation Ansible performs on managed hosts.
+- **Template:** a file containing Jinja2 expressions that Ansible renders with variables.
+- **Handler:** a task that runs when notified, commonly used to restart or reload a service after a configuration change.
+- **Idempotency:** repeated runs maintain the desired state without making unnecessary changes.
 
 ## Troubleshooting
 
-- **SSH/public key failure:** check the key path, mode `400`, current inventory IP, and `ec2-user` remote user.
-- **sudo failure:** confirm the EC2 user can run sudo.
-- **HTTP timeout:** allow inbound TCP port 80 in the web server security group.
-- **Package/service mismatch:** this role targets Amazon Linux 2023 and uses DNF with the `httpd` package and service.
+| Symptom | Check |
+|---|---|
+| `UNREACHABLE` or public key denied | Confirm the key path is `/etc/ansible/aws/ansible.pem`, mode is `400`, inventory IP is current, and SSH user is `ec2-user`. |
+| SSH timeout | Confirm inbound TCP 22 is allowed from the control node and the instance is reachable. |
+| sudo failure | Confirm `ec2-user` has sudo privileges and `become` settings are active. |
+| HTTP timeout from your machine | Allow inbound TCP 80 in the web server's security group. |
+| Package or service not found | This role targets Amazon Linux 2023 and expects package/service name `httpd`. |
+
