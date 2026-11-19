@@ -1,0 +1,22 @@
+---
+- name: Remove webserver configuration
+  hosts: web
+  become: true
+
+  tasks:
+    - name: Stop and disable Apache
+      ansible.builtin.service:
+        name: httpd
+        state: stopped
+        enabled: false
+      failed_when: false
+
+    - name: Remove Apache
+      ansible.builtin.dnf:
+        name: httpd
+        state: absent
+
+    - name: Remove the deployed web page
+      ansible.builtin.file:
+        path: /var/www/html/index.html
+        state: absent
