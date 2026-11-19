@@ -161,7 +161,7 @@ Create `sudo nano /etc/ansible/site.yml`:
 # apply playbook yaml 
 ```
 cd /etc/ansible
-sudo ansible-plabook -i iventory/hosts playbooks/site.yml
+sudo ansible-playbook -i iventory/hosts playbooks/site.yml
 ```
 
 The `roles` section tells Ansible to load tasks and supporting files from `roles/webserver/`. Since privilege escalation is already enabled in `ansible.cfg`, the playbook does not need a separate `become` line.
