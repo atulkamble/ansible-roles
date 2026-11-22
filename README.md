@@ -148,7 +148,7 @@ Ansible substitutes the variables when it copies the template to the target host
 
 ## 7. Create the playbook
 
-Create `sudo nano /etc/ansible/site.yml`:
+Create `sudo nano /etc/ansible/playbooks/site.yml`:
 
 ```yaml
 ---
