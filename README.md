@@ -44,8 +44,8 @@ Because `inventory = ./inventory` points to a directory, Ansible reads the `inve
 Run these commands on the Ansible control node:
 
 ```bash
-cd /etc/ansible
-mkdir -p roles/webserver/{defaults,tasks,handlers,templates}
+sudo cd /etc/ansible
+sudo mkdir -p roles/webserver/{defaults,tasks,handlers,templates}
 ```
 
 Expected project layout:
